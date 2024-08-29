@@ -1,4 +1,5 @@
 # MSFS LOD Maker Addon
+![image](https://github.com/user-attachments/assets/4e257645-09eb-481a-bf03-8f069e207c27)
 
 ## Overview
 MSFS LOD system for collections in Blender 3.6 & above, with LOD generation. It allows for easy management and generation of LODs, with features for decimation, material conversion, and texture baking.
