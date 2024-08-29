@@ -24,7 +24,7 @@ bl_info = {
     "blender": (3, 60, 0),
     "location": "''Properties'' > ''Scene'' > ''Level of Detail Collections''",
     "warning": "",
-    "wiki_url": "",
+    "wiki_url": "https://github.com/Devinci297/MSFS-LOD-Maker/blob/main/README.md",
     "tracker_url": "a",
     "category": "Scene"
 }
