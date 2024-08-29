@@ -35,7 +35,7 @@ MSFS LOD system for collections in Blender 3.6 & above, with LOD generation. It 
 Devinci
 
 ## License
-[Your chosen license]
+[GPL-3.0 license]
 
 ## Support
 For issues and feature requests, please [open an issue on GitHub](https://github.com/yourusername/your-repo-name/issues).

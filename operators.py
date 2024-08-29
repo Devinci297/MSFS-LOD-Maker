@@ -8,6 +8,8 @@
 # - Baking textures to vertex colors
 
 import bpy
+from bpy.types import Operator
+from bpy.props import IntProperty
 import os
 import bmesh
 import logging
@@ -66,7 +68,7 @@ class LODIFY_OT_auto_setup(bpy.types.Operator):
         base_name = base_collection.name[:-5]  # Remove "_LOD00" from the end
         
         for i in range(4):
-            lod_name = f"{base_name}_LOD{i:02d}"
+            lod_name = f"{base_name}LOD{i:02d}"
             if lod_name in bpy.data.collections:
                 item = scn.lod.lod_list.add()
                 item.ui_lod = bpy.data.collections[lod_name]
@@ -110,7 +112,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         item.ui_rdv = True
 
         for i in range(1, 4):  # Generate LOD01, LOD02, LOD03
-            lod_name = f"{base_name}_LOD{i:02d}"
+            lod_name = f"{base_name}LOD{i:02d}"
             lod_collection = bpy.data.collections.get(lod_name)
             
             if not lod_collection:
@@ -166,7 +168,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
                 new_obj.data = obj.data.copy()
                 target_collection.objects.link(new_obj)
                 
-                if lod_level == 3:  # For LOD03
+                if lod_level in [2, 3]:  # For LOD02 and LOD03
                     # Convert MSFS materials to Blender materials
                     self.convert_materials(new_obj)
 
@@ -198,7 +200,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             child_target = next((c for c in target_collection.children if c.name.startswith(child.name)), None)
             if child_target:
                 self.process_objects(child, child_target, lod_level, angle, scn, context)
-
+                
     def clear_collection(self, collection):
         for obj in list(collection.objects):
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -239,17 +241,44 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
 
-        # Create a color attribute if it doesn't exist
-        if not obj.data.color_attributes:
-            bpy.ops.geometry.color_attribute_add(
-                name=f"{obj.name}_Color",
-                domain='POINT',
-                data_type='FLOAT_COLOR',
-                color=(1, 1, 1, 1)
-            )
+        # Create a unique color attribute name
+        base_name = f"{obj.name}_Color"
+        color_attribute_name = base_name
+        counter = 1
+        while color_attribute_name in obj.data.color_attributes:
+            color_attribute_name = f"{base_name}_{counter}"
+            counter += 1
 
-        # Set the newly created color attribute as active
-        obj.data.color_attributes.active_color = obj.data.color_attributes[f"{obj.name}_Color"]
+        # Create a color attribute if it doesn't exist
+        if color_attribute_name not in obj.data.color_attributes:
+            color_attribute = obj.data.color_attributes.new(
+                name=color_attribute_name,
+                type='FLOAT_COLOR',
+                domain='POINT'
+            )
+            
+            # Initialize the color attribute with white
+            mesh = obj.data
+            bm = bmesh.new()
+            bm.from_mesh(mesh)
+            color_layer = bm.loops.layers.color.get(color_attribute_name)
+            
+            if color_layer:
+                for face in bm.faces:
+                    for loop in face.loops:
+                        loop[color_layer] = (1, 1, 1, 1)
+                
+                bm.to_mesh(mesh)
+                mesh.update()
+            
+            bm.free()
+
+        # Set the color attribute as active
+        if color_attribute_name in obj.data.color_attributes:
+            obj.data.color_attributes.active_color = obj.data.color_attributes[color_attribute_name]
+        else:
+            self.report({'WARNING'}, f"Failed to create color attribute for {obj.name}")
+            return
 
         # Set up render settings
         bpy.context.scene.render.engine = 'CYCLES'
@@ -268,8 +297,12 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
                         node.image.reload()
 
         # Bake vertex colors
-        bpy.ops.object.bake(type='DIFFUSE')        
+        bpy.ops.object.bake(type='DIFFUSE')
 
+        # Set the active color attribute for viewport display
+        if hasattr(obj.data.attributes, 'active_color'):
+            obj.data.attributes.active_color = obj.data.attributes[color_attribute_name]
+            
 class LODIFY_OT_generate_lod_shrinkwrap(bpy.types.Operator):
     bl_idname = "lodify.generate_lod_shrinkwrap"
     bl_label = "Generate LODs using Shrinkwrap"
@@ -286,7 +319,7 @@ class LODIFY_OT_generate_lod_shrinkwrap(bpy.types.Operator):
         base_name = base_collection.name[:-5]  # Remove "_LOD00" from the end
         
         for i in range(1, 4):  # Generate LOD01, LOD02, LOD03
-            lod_name = f"{base_name}_LOD{i:02d}"
+            lod_name = f"{base_name.rstrip('_')}_LOOOOD{i:02d}"
             lod_collection = bpy.data.collections.get(lod_name)
             
             if not lod_collection:
@@ -345,10 +378,24 @@ class LODIFY_OT_apply_lod_modifiers(bpy.types.Operator):
             self.report({'ERROR'}, "LOD collection not found")
             return {'CANCELLED'}
 
+        self.apply_modifiers_recursive(context, lod_collection)
 
         self.report({'INFO'}, f"Applied all modifiers for LOD {self.lod_index}")
         return {'FINISHED'}
-   
+
+    def apply_modifiers_recursive(self, context, collection):
+        for obj in collection.objects:
+            if obj.type == 'MESH':
+                context.view_layer.objects.active = obj
+                for modifier in obj.modifiers:
+                    try:
+                        bpy.ops.object.modifier_apply({"object": obj, "selected_objects": [obj]}, modifier=modifier.name)
+                    except RuntimeError:
+                        self.report({'WARNING'}, f"Could not apply modifier {modifier.name} to object {obj.name}")
+
+        for child_collection in collection.children:
+            self.apply_modifiers_recursive(context, child_collection)
+            
 class LODIFY_OT_convert_msfs_to_blender(bpy.types.Operator):
     bl_idname = "lodify.convert_msfs_to_blender"
     bl_label = "Convert MSFS to Blender Material"
