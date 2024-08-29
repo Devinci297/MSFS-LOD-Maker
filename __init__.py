@@ -20,7 +20,7 @@ bl_info = {
     "name": "MSFS LOD Maker",
     "description": "MSFS LOD system for collections in Blender 3.6 & above, with LOD generation",
     "author": "Devinci (inspired by DB3D's Lodify addon)",
-    "version": (0, 1),
+    "version": (0, 1, 1),
     "blender": (3, 60, 0),
     "location": "''Properties'' > ''Scene'' > ''Level of Detail Collections''",
     "warning": "",
