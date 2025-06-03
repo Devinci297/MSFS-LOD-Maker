@@ -128,8 +128,11 @@ This addon uses an intelligent mixed approach for LOD generation:
 
 ### Cube-Based Shrinkwrap Details
 The shrinkwrap method creates a subdivided cube proxy with optimizations:
+- **Individual cube per mesh**: Each mesh gets its own perfectly positioned and scaled cube proxy
+- **Precise positioning**: Cubes are positioned at the exact bounding box center of the target mesh
+- **Optimal scaling**: Cubes are scaled to match the target mesh's bounding box dimensions (with 10% margin for complete coverage)
 - **Target**: Uses LOD02 mesh instead of original LOD00 for more appropriate detail level
-- **Bottom face removal**: Automatically deletes the bottom face of the cube (not typically visible)
+- **Bottom face removal**: Automatically deletes the bottom face of each cube (not typically visible)
 - **Modifier preservation**: Shrinkwrap modifiers are left unapplied for user adjustment
 - **Adaptive subdivision levels**:
   - **0-100 vertices**: Basic cube (8 vertices)
@@ -138,7 +141,7 @@ The shrinkwrap method creates a subdivided cube proxy with optimizations:
   - **2001-8000 vertices**: 3 subdivision levels (386 vertices)
   - **8000+ vertices**: 4 subdivision levels (1538 vertices)
 
-This adaptive approach ensures optimal balance between performance and shape approximation while using the already-simplified LOD02 as the shrinkwrap target. Users can manually adjust shrinkwrap settings and apply the modifier when satisfied with the results.
+This adaptive approach ensures optimal balance between performance and shape approximation while using the already-simplified LOD02 as the shrinkwrap target. Each mesh receives its own custom-fitted cube proxy for the best possible LOD03 representation. Users can manually adjust shrinkwrap settings and apply the modifier when satisfied with the results.
 
 ## Tips
 - Ensure your base model is in a collection named with the suffix "_LOD00".

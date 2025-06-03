@@ -856,7 +856,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         print(f"    Added decimate modifier with {angle}° angle for LOD{lod_level:02d}")
     
     def apply_shrinkwrap_method(self, new_obj, original_obj, lod_level, scn, context, target_collection, original_materials, vertex_color_mode):
-        """Apply shrinkwrap method to create a proxy object."""
+        """Apply shrinkwrap method to create a proxy object with individual cube for each mesh."""
         # Store the original object temporarily
         original_obj_for_shrinkwrap = new_obj
         
@@ -891,7 +891,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         # Count vertices in the original mesh to determine subdivision level
         vertex_count = len(original_obj_for_shrinkwrap.data.vertices)
         
-        # Calculate subdivision level based on vertex count
+        # Calculate subdivision level based on vertex count (adaptive proxy complexity)
         if vertex_count <= 100:
             subdivisions = 2
         elif vertex_count <= 500:
@@ -903,22 +903,41 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         else:
             subdivisions = 6
         
-        print(f"    Original mesh has {vertex_count} vertices, using {subdivisions} subdivisions for cube proxy")
+        print(f"    Creating individual cube proxy for '{original_obj.name}' ({vertex_count} vertices) using {subdivisions} subdivisions")
         
-        # Create a cube proxy and subdivide it
+        # Get the bounding box and center of the target mesh for precise cube positioning
+        target_mesh = lod02_target
+        bbox_corners = [target_mesh.matrix_world @ mathutils.Vector(corner) for corner in target_mesh.bound_box]
+        bbox_min = mathutils.Vector((min(c.x for c in bbox_corners), min(c.y for c in bbox_corners), min(c.z for c in bbox_corners)))
+        bbox_max = mathutils.Vector((max(c.x for c in bbox_corners), max(c.y for c in bbox_corners), max(c.z for c in bbox_corners)))
+        bbox_center = (bbox_min + bbox_max) / 2
+        bbox_dimensions = bbox_max - bbox_min
+        
+        # Create a cube proxy positioned and scaled specifically for this mesh
         bpy.ops.object.select_all(action='DESELECT')
-        bpy.ops.mesh.primitive_cube_add(size=2, location=original_obj_for_shrinkwrap.location)
+        bpy.ops.mesh.primitive_cube_add(size=2, location=bbox_center)
         proxy = context.active_object
         proxy.name = f"{original_obj_for_shrinkwrap.name}_Proxy"
         
-        # Scale the proxy to match the original object's dimensions
-        proxy.scale = original_obj_for_shrinkwrap.dimensions
+        # Scale the proxy to match the target object's exact bounding box dimensions
+        # Add a small margin (10%) to ensure complete coverage
+        margin_factor = 1.1
+        proxy.scale = (
+            bbox_dimensions.x * margin_factor / 2,  # Cube default size is 2, so divide by 2
+            bbox_dimensions.y * margin_factor / 2,
+            bbox_dimensions.z * margin_factor / 2
+        )
+        
+        # Apply the scale transform to make it permanent
+        bpy.context.view_layer.objects.active = proxy
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        
+        print(f"    Positioned cube at {bbox_center} with dimensions {bbox_dimensions}")
         
         # Enter edit mode, delete bottom face, and apply subdivisions
-        bpy.context.view_layer.objects.active = proxy
         bpy.ops.object.mode_set(mode='EDIT')
         
-        # Delete the bottom face of the cube
+        # Delete the bottom face of the cube (typically not visible and improves performance)
         bpy.ops.mesh.select_all(action='DESELECT')
         # Select the bottom face (face with lowest Z coordinate)
         bm = bmesh.from_edit_mesh(proxy.data)
@@ -936,14 +955,15 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         if bottom_face:
             bottom_face.select = True
             bpy.ops.mesh.delete(type='FACE')
-            print(f"    Deleted bottom face of cube proxy")
+            print(f"    Deleted bottom face of cube proxy for optimization")
         
-        # Apply subdivisions
+        # Apply adaptive subdivisions for optimal detail level
         bpy.ops.mesh.select_all(action='SELECT')
         for i in range(subdivisions):
             bpy.ops.mesh.subdivide(number_cuts=1, smoothness=0.0)
         
         bpy.ops.object.mode_set(mode='OBJECT')
+        print(f"    Applied {subdivisions} subdivision levels to cube proxy")
         
         # Add shrinkwrap modifier using appropriate target
         shrinkwrap = proxy.modifiers.new(name="LOD_Shrinkwrap", type='SHRINKWRAP')
@@ -953,9 +973,9 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         shrinkwrap.use_negative_direction = False
         shrinkwrap.use_positive_direction = False
         
-        print(f"    Added shrinkwrap modifier (not applied) - user can adjust and apply manually")
+        print(f"    Added shrinkwrap modifier targeting '{lod02_target.name}' (not applied - user can adjust and apply manually)")
         
-        # Add Decimate modifier after Shrinkwrap with 5° angle limit
+        # Add Decimate modifier after Shrinkwrap with 5° angle limit for cleanup
         decimate = proxy.modifiers.new(name="LOD_Decimate", type='DECIMATE')
         decimate.decimate_type = 'DISSOLVE'
         decimate.angle_limit = 5 * (3.14159 / 180)  # Convert 5° to radians
@@ -965,7 +985,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         # Handle vertex colors for shrinkwrap objects
         if vertex_color_mode == 'AUTO' and lod_level == 3:
             # Bake LOD00 albedo to vertex colors for LOD03
-            print(f"    Baking LOD00 albedo to vertex colors for LOD03")
+            print(f"    Baking LOD00 albedo to vertex colors for LOD03 cube proxy")
             self.bake_lod00_albedo_to_vertex_colors(proxy)
         else:
             # For other vertex color modes, apply vertex colors to the proxy
@@ -984,7 +1004,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         # Rename the proxy to match the expected LOD naming
         proxy.name = f"{original_obj.name}_LOD{lod_level:02d}"
         
-        print(f"    Successfully created LOD{lod_level:02d} shrinkwrap object '{proxy.name}' in collection '{target_collection.name}'")
+        print(f"    Successfully created individual LOD{lod_level:02d} cube proxy '{proxy.name}' for mesh '{original_obj.name}' in collection '{target_collection.name}'")
         
         # Return the proxy object for further processing
         return proxy
