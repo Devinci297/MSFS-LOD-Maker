@@ -907,9 +907,9 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         
         # Get the bounding box and center of the target mesh for precise cube positioning
         target_mesh = lod02_target
-        bbox_corners = [target_mesh.matrix_world @ mathutils.Vector(corner) for corner in target_mesh.bound_box]
-        bbox_min = mathutils.Vector((min(c.x for c in bbox_corners), min(c.y for c in bbox_corners), min(c.z for c in bbox_corners)))
-        bbox_max = mathutils.Vector((max(c.x for c in bbox_corners), max(c.y for c in bbox_corners), max(c.z for c in bbox_corners)))
+        bbox_corners = [target_mesh.matrix_world @ Vector(corner) for corner in target_mesh.bound_box]
+        bbox_min = Vector((min(c.x for c in bbox_corners), min(c.y for c in bbox_corners), min(c.z for c in bbox_corners)))
+        bbox_max = Vector((max(c.x for c in bbox_corners), max(c.y for c in bbox_corners), max(c.z for c in bbox_corners)))
         bbox_center = (bbox_min + bbox_max) / 2
         bbox_dimensions = bbox_max - bbox_min
         
