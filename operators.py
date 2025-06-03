@@ -18,11 +18,41 @@ from mathutils import Vector
 import math
 
 def find_base_collection():
-    for scene in bpy.data.scenes:
-        for collection in scene.collection.children:
-            if collection.name.endswith("_LOD00"):
+    """Find the first active LOD00 collection in the current scene."""
+    current_scene = bpy.context.scene
+    view_layer = bpy.context.view_layer
+    
+    for collection in current_scene.collection.children:
+        if collection.name.endswith("_LOD00"):
+            # Check if the collection is active (enabled) in the current view layer
+            layer_collection = view_layer.layer_collection.children.get(collection.name)
+            if layer_collection and not layer_collection.exclude:
+                print(f"Found active LOD00 collection: '{collection.name}'")
                 return collection
+            else:
+                print(f"Skipping inactive LOD00 collection: '{collection.name}'")
+    
+    print("No active LOD00 collections found")
     return None
+
+def find_all_active_base_collections():
+    """Find all active LOD00 collections in the current scene."""
+    current_scene = bpy.context.scene
+    view_layer = bpy.context.view_layer
+    active_collections = []
+    
+    for collection in current_scene.collection.children:
+        if collection.name.endswith("_LOD00"):
+            # Check if the collection is active (enabled) in the current view layer
+            layer_collection = view_layer.layer_collection.children.get(collection.name)
+            if layer_collection and not layer_collection.exclude:
+                active_collections.append(collection)
+                print(f"Found active LOD00 collection: '{collection.name}'")
+            else:
+                print(f"Skipping inactive LOD00 collection: '{collection.name}'")
+    
+    print(f"Total active LOD00 collections found: {len(active_collections)}")
+    return active_collections
 
 def get_base_name_from_collection(collection):
     """

@@ -71,13 +71,14 @@ Choose how vertex colors are handled across LODs:
 ## Usage
 1. In the Scene Properties panel, find the "Level of Detail Collections" section.
 2. Enable the LOD system by clicking the checkbox.
-3. Use the "+" button to add LOD levels manually.
-4. Adjust the "Small Object Threshold" and "Decimate Angle Increments" as needed.
-5. **MSFS LOD Optimization**: 
+3. **Important**: Make sure your LOD00 collection is **active** (checked) in the Scene Collections panel - only active LOD00 collections will be processed for LOD generation.
+4. Use the "+" button to add LOD levels manually.
+5. Adjust the "Small Object Threshold" and "Decimate Angle Increments" as needed.
+6. **MSFS LOD Optimization**: 
    - Enable "Use Automatic LOD Calculation" (default) for smart LOD values based on object size
    - Or disable it and provide manual values in "Manual LOD Base Values" (comma-separated, e.g., "12,3,2,1")
    - Use "Set Default (4,3,2,1)" for quick standard LOD values
-6. Click "Generate LODs (Decimate + Shrinkwrap)" to create LOD versions using:
+7. Click "Generate LODs (Decimate + Shrinkwrap)" to create LOD versions using:
    - **Decimate method** for LOD01 and LOD02 (mesh simplification)
    - **Shrinkwrap method** for LOD03 (creates low-poly proxy wrapped to original shape)
    - **Shrinkwrap modifiers are left unapplied** for manual adjustment and fine-tuning
@@ -86,10 +87,16 @@ Choose how vertex colors are handled across LODs:
    - **Sets "Color" as default vertex color attribute** for LOD00-03
    - **LOD00 gets pure white vertex colors** (no texture baking)
    - **LOD03 bakes vertex colors from LOD00 materials** for high-quality appearance matching the original
-7. **Manual modifier adjustment**: After LOD generation, you can adjust the shrinkwrap modifier settings on LOD03 objects and apply them when satisfied
-8. Alternatively, use "Calculate & Set LOD Values" to only calculate and set values without generating LODs.
-9. Use the material conversion tools if working with MSFS materials.
-10. Bake textures to vertex colors for the lowest LOD level if desired.
+8. **Manual modifier adjustment**: After LOD generation, you can adjust the shrinkwrap modifier settings on LOD03 objects and apply them when satisfied
+9. Alternatively, use "Calculate & Set LOD Values" to only calculate and set values without generating LODs.
+10. Use the material conversion tools if working with MSFS materials.
+11. Bake textures to vertex colors for the lowest LOD level if desired.
+
+## Collection Management
+- **Active Collections Only**: The addon now only processes LOD00 collections that are **active** (checked) in the Scene Collections panel
+- This gives you full control over which collections get LOD generation
+- Inactive (unchecked) LOD00 collections will be ignored during LOD generation
+- The console will show which collections are being processed or skipped
 
 ## MSFS LOD Value Calculation
 The addon automatically calculates optimal LOD values based on:
@@ -141,15 +148,17 @@ The shrinkwrap method creates a subdivided cube proxy with optimizations:
   - **2001-8000 vertices**: 3 subdivision levels (386 vertices)
   - **8000+ vertices**: 4 subdivision levels (1538 vertices)
 
-This adaptive approach ensures optimal balance between performance and shape approximation while using the already-simplified LOD02 as the shrinkwrap target. Each mesh receives its own custom-fitted cube proxy for the best possible LOD03 representation. Users can manually adjust shrinkwrap settings and apply the modifier when satisfied with the results.
+This adaptive approach ensures optimal balance between performance and shape approximation while using the already-simplified LOD02 as the shrinkwrap target. Each mesh receives its own custom-fitted cube proxy for the best possible LOD03 representation. Users can manually adjust shrinkwrap settings and apply the modifier when satisfied.
 
 ## Tips
 - Ensure your base model is in a collection named with the suffix "_LOD00".
+- **Important**: Make sure your LOD00 collection is **active** (checked) in the Scene Collections panel before running LOD generation.
 - Use descriptive names for your LOD collections (e.g., "MyModel_LOD00", "MyModel_LOD01", etc.).
 - **Important**: LOD collections must follow the exact naming pattern: `[BaseName]_LOD00`, `[BaseName]_LOD01`, `[BaseName]_LOD02`, `[BaseName]_LOD03`
 - If you have a collection ending with an underscore (e.g., "Antenna_"), the addon will automatically handle it correctly
 - Adjust the decimate angle increment to control the level of simplification between LODs.
 - The small object threshold helps remove tiny details in higher LODs for better performance.
+- **Control which collections are processed**: Use the checkboxes in the Scene Collections panel to activate/deactivate LOD00 collections for processing.
 - **Make sure the MSFS Multi-Export addon is enabled** for automatic LOD value setting to work.
 - Check the Blender Console (Window > Toggle System Console) for detailed debugging information during LOD generation.
 - **LOD03 vertex color baking**: Bakes vertex colors directly from LOD00 materials for high-quality appearance matching the original.
