@@ -12,6 +12,8 @@ MSFS LOD system for collections in Blender 3.6 & above, with LOD generation and 
 ## Features
 - Automatic LOD setup for collections
 - **Mixed LOD generation**: Decimate for LOD01-02, Shrinkwrap for LOD03 (final LOD)
+- **Flexible LOD generation methods**: Choose between Mixed (recommended), Decimate Only, or Shrinkwrap Only
+- **Customizable vertex color handling**: Auto, White Only, Bake All, or Transfer All modes
 - **Automatic MSFS LOD value calculation** based on object size and MSFS 2024 documentation
 - **Quick default LOD values**: One-click button to set standard values (4, 3, 2, 1)
 - **Integration with MSFS Multi-Export addon** - automatically sets optimal LOD values and enables proper settings
@@ -19,10 +21,52 @@ MSFS LOD system for collections in Blender 3.6 & above, with LOD generation and 
 - **Enhanced vertex color baking**: 
   - **LOD00**: Uses pure white vertex colors (no texture baking)
   - **LOD02**: Uses converted Blender materials for baking
-  - **LOD03**: Transfers vertex colors directly from LOD02 to ensure identical appearance
+  - **LOD03**: Bakes vertex colors directly from LOD00 materials for high-quality results
   - Automatically sets "Color" as default attribute for LOD00-03
 - Small object culling for higher LODs
 - Manual LOD value override option
+- **User-adjustable modifiers**: Shrinkwrap modifiers are left unapplied for manual fine-tuning
+
+## LOD Generation Methods
+The addon offers three generation methods via dropdown selection:
+
+### Mixed Method (Recommended)
+- **LOD01-02**: Uses Decimate method for gradual mesh simplification
+- **LOD03**: Uses Shrinkwrap method for maximum performance optimization
+- Best balance between quality and performance
+
+### Decimate Only
+- **All LODs**: Uses Decimate method for consistent mesh reduction
+- Good for objects where shape preservation is critical
+- Maintains original topology structure
+
+### Shrinkwrap Only 
+- **All LODs**: Uses Shrinkwrap method for aggressive optimization
+- Creates cube-based proxy geometry for all LODs
+- Maximum performance focus for distant objects
+
+## Vertex Color Modes
+Choose how vertex colors are handled across LODs:
+
+### Automatic (Default)
+- **LOD00**: Pure white vertex colors
+- **LOD01**: Pure white vertex colors  
+- **LOD02**: Baked from MSFS albedo textures
+- **LOD03**: Baked from original LOD00 materials
+
+### White Only
+- **All LODs**: Pure white vertex colors
+- Fastest generation, no texture baking
+
+### Bake All
+- **All LODs**: Bake textures to vertex colors
+- Consistent appearance across all LODs
+- Higher generation time
+
+### Transfer All
+- **LOD00**: Pure white vertex colors
+- **LOD01-03**: Transfer vertex colors from LOD00
+- Maintains consistent coloring (placeholder implementation)
 
 ## Usage
 1. In the Scene Properties panel, find the "Level of Detail Collections" section.
@@ -36,14 +80,16 @@ MSFS LOD system for collections in Blender 3.6 & above, with LOD generation and 
 6. Click "Generate LODs (Decimate + Shrinkwrap)" to create LOD versions using:
    - **Decimate method** for LOD01 and LOD02 (mesh simplification)
    - **Shrinkwrap method** for LOD03 (creates low-poly proxy wrapped to original shape)
+   - **Shrinkwrap modifiers are left unapplied** for manual adjustment and fine-tuning
    - Automatically sets MSFS LOD values based on object size
    - **Activates MSFS Multi-Export settings**: Enables "Grouped by Collections" and the first LOD group
    - **Sets "Color" as default vertex color attribute** for LOD00-03
    - **LOD00 gets pure white vertex colors** (no texture baking)
-   - **LOD03 transfers vertex colors from LOD02** to ensure identical appearance
-7. Alternatively, use "Calculate & Set LOD Values" to only calculate and set values without generating LODs.
-8. Use the material conversion tools if working with MSFS materials.
-9. Bake textures to vertex colors for the lowest LOD level if desired.
+   - **LOD03 bakes vertex colors from LOD00 materials** for high-quality appearance matching the original
+7. **Manual modifier adjustment**: After LOD generation, you can adjust the shrinkwrap modifier settings on LOD03 objects and apply them when satisfied
+8. Alternatively, use "Calculate & Set LOD Values" to only calculate and set values without generating LODs.
+9. Use the material conversion tools if working with MSFS materials.
+10. Bake textures to vertex colors for the lowest LOD level if desired.
 
 ## MSFS LOD Value Calculation
 The addon automatically calculates optimal LOD values based on:
@@ -78,11 +124,13 @@ This addon uses an intelligent mixed approach for LOD generation:
 - **Automatic simplification**: No need to fine-tune decimation parameters for extreme reductions
 - **Smart targeting**: Uses LOD02 as shrinkwrap target for better detail preservation
 - **Optimized geometry**: Removes unnecessary bottom face from cube proxy for cleaner results
+- **User-adjustable**: Shrinkwrap modifiers are left unapplied, allowing manual fine-tuning before application
 
 ### Cube-Based Shrinkwrap Details
 The shrinkwrap method creates a subdivided cube proxy with optimizations:
 - **Target**: Uses LOD02 mesh instead of original LOD00 for more appropriate detail level
 - **Bottom face removal**: Automatically deletes the bottom face of the cube (not typically visible)
+- **Modifier preservation**: Shrinkwrap modifiers are left unapplied for user adjustment
 - **Adaptive subdivision levels**:
   - **0-100 vertices**: Basic cube (8 vertices)
   - **101-500 vertices**: 1 subdivision level (26 vertices)  
@@ -90,7 +138,7 @@ The shrinkwrap method creates a subdivided cube proxy with optimizations:
   - **2001-8000 vertices**: 3 subdivision levels (386 vertices)
   - **8000+ vertices**: 4 subdivision levels (1538 vertices)
 
-This adaptive approach ensures optimal balance between performance and shape approximation while using the already-simplified LOD02 as the shrinkwrap target.
+This adaptive approach ensures optimal balance between performance and shape approximation while using the already-simplified LOD02 as the shrinkwrap target. Users can manually adjust shrinkwrap settings and apply the modifier when satisfied with the results.
 
 ## Tips
 - Ensure your base model is in a collection named with the suffix "_LOD00".
@@ -101,7 +149,8 @@ This adaptive approach ensures optimal balance between performance and shape app
 - The small object threshold helps remove tiny details in higher LODs for better performance.
 - **Make sure the MSFS Multi-Export addon is enabled** for automatic LOD value setting to work.
 - Check the Blender Console (Window > Toggle System Console) for detailed debugging information during LOD generation.
-- **LOD03 vertex color transfer**: Directly transfers vertex colors from LOD02 to ensure identical appearance without brightness issues.
+- **LOD03 vertex color baking**: Bakes vertex colors directly from LOD00 materials for high-quality appearance matching the original.
+- **Modifier adjustment**: After LOD generation, review and adjust the shrinkwrap modifier settings on LOD03 objects before applying them manually.
 
 ## Troubleshooting
 
@@ -129,7 +178,27 @@ The addon provides detailed console output showing:
 Devinci
 
 ## License
-[GPL-3.0 license]
+MIT License
+
+Copyright (c) 2024 Devinci
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ## Support
 For issues and feature requests, please [open an issue on GitHub](https://github.com/yourusername/your-repo-name/issues).

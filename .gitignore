@@ -1,1 +1,23 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# Blender temp files
+*.blend1
+*.blend2
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Log files
+*.log
+
 github_update_instructions.md
