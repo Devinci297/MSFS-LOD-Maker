@@ -198,7 +198,7 @@ def set_msfs_multi_exporter_lod_values(base_collection_name, lod_values):
         # Find or create the LOD group for this collection
         lod_group = None
         for group in lod_groups:
-            if group.name == base_collection_name:
+            if hasattr(group, 'name') and group.name == base_collection_name:
                 lod_group = group
                 print(f"Found matching LOD group: '{group.name}'")
                 break
@@ -207,47 +207,61 @@ def set_msfs_multi_exporter_lod_values(base_collection_name, lod_values):
             # Create new LOD group if it doesn't exist
             print(f"Creating new LOD group: '{base_collection_name}'")
             lod_group = lod_groups.add()
-            lod_group.name = base_collection_name
-            print(f"Created new LOD group: '{lod_group.name}'")
-        
-        # Enable the LOD group
-        lod_group.enabled = True
-        print(f"Enabled LOD group: '{lod_group.name}'")
-        
-        # Ensure we have 4 LOD entries
-        current_lod_count = len(lod_group.lods)
-        print(f"Current LOD count: {current_lod_count}")
-        
-        while len(lod_group.lods) < 4:
-            lod_group.lods.add()
-            print(f"Added LOD entry, now have {len(lod_group.lods)} LODs")
-        
-        print(f"LOD group '{lod_group.name}' now has {len(lod_group.lods)} LOD entries")
-        
-        # Set the LOD values and verify they're set
-        for i, value in enumerate(lod_values[:4]):  # Ensure we don't exceed 4 LODs
-            old_value = lod_group.lods[i].lod_value
-            lod_group.lods[i].lod_value = value
-            new_value = lod_group.lods[i].lod_value
-            print(f"LOD{i}: {old_value} -> {new_value} (target: {value})")
-            
-            # Verify the value was set correctly
-            if abs(new_value - value) > 0.001:
-                print(f"WARNING: LOD{i} value not set correctly! Expected {value}, got {new_value}")
-        
-        # Force an update of the UI
-        try:
-            bpy.context.area.tag_redraw()
-        except:
-            pass
-        
-        # Final verification
-        print(f"=== Final LOD Values ===")
-        for i in range(4):
-            if i < len(lod_group.lods):
-                print(f"LOD{i}: {lod_group.lods[i].lod_value}")
+            if hasattr(lod_group, 'name'):
+                lod_group.name = base_collection_name
+                print(f"Created new LOD group: '{lod_group.name}'")
             else:
-                print(f"LOD{i}: NOT SET")
+                print(f"Warning: LOD group object doesn't have 'name' attribute")
+                return False
+        
+        # Enable the LOD group (if it has the enabled attribute)
+        if hasattr(lod_group, 'enabled'):
+            lod_group.enabled = True
+            print(f"Enabled LOD group: '{lod_group.name}'")
+        else:
+            print(f"Warning: LOD group doesn't have 'enabled' attribute - MSFS Multi-Export version mismatch")
+        
+        # Ensure we have 4 LOD entries (if lods attribute exists)
+        if hasattr(lod_group, 'lods'):
+            current_lod_count = len(lod_group.lods)
+            print(f"Current LOD count: {current_lod_count}")
+            
+            while len(lod_group.lods) < 4:
+                lod_group.lods.add()
+                print(f"Added LOD entry, now have {len(lod_group.lods)} LODs")
+            
+            print(f"LOD group '{lod_group.name}' now has {len(lod_group.lods)} LOD entries")
+            
+            # Set the LOD values and verify they're set
+            for i, value in enumerate(lod_values[:4]):  # Ensure we don't exceed 4 LODs
+                if i < len(lod_group.lods) and hasattr(lod_group.lods[i], 'lod_value'):
+                    old_value = getattr(lod_group.lods[i], 'lod_value', 0.0)
+                    lod_group.lods[i].lod_value = value
+                    new_value = getattr(lod_group.lods[i], 'lod_value', 0.0)
+                    print(f"LOD{i}: {old_value} -> {new_value} (target: {value})")
+                    
+                    # Verify the value was set correctly
+                    if abs(new_value - value) > 0.001:
+                        print(f"WARNING: LOD{i} value not set correctly! Expected {value}, got {new_value}")
+                else:
+                    print(f"WARNING: LOD{i} entry missing or no lod_value attribute")
+            
+            # Force an update of the UI
+            try:
+                bpy.context.area.tag_redraw()
+            except:
+                pass
+            
+            # Final verification
+            print(f"=== Final LOD Values ===")
+            for i in range(4):
+                if i < len(lod_group.lods) and hasattr(lod_group.lods[i], 'lod_value'):
+                    print(f"LOD{i}: {lod_group.lods[i].lod_value}")
+                else:
+                    print(f"LOD{i}: NOT SET")
+        else:
+            print(f"Warning: LOD group doesn't have 'lods' attribute - MSFS Multi-Export version mismatch")
+            return False
         
         print(f"Successfully set MSFS LOD values for '{base_collection_name}'")
         return True
@@ -351,6 +365,21 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         
         print(f"Base collection: '{base_collection.name}' -> Base name: '{base_name}'")
         
+        # Determine which LODs to generate based on user selection
+        lods_to_generate = []
+        if scn.lod.generate_lod01:
+            lods_to_generate.append(1)
+        if scn.lod.generate_lod02:
+            lods_to_generate.append(2)
+        if scn.lod.generate_lod03:
+            lods_to_generate.append(3)
+        
+        if not lods_to_generate:
+            self.report({'WARNING'}, "No LODs selected for generation. Please select at least one LOD level.")
+            return {'CANCELLED'}
+        
+        print(f"Generating selected LODs: {lods_to_generate}")
+        
         # Use optimal LOD values based on object size and MSFS recommendations
         optimal_lod_values = get_lod_values(context, base_collection)
         object_size = calculate_object_bounds(base_collection)
@@ -367,7 +396,9 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             if obj.type == 'MESH':
                 self.create_white_vertex_colors(obj)
         
-        total_objects = sum(1 for obj in base_collection.all_objects if obj.type == 'MESH' and not self.is_in_child_lod00(obj, base_collection)) * 3  # 3 LOD levels
+        # Calculate total objects based on selected LODs
+        base_mesh_count = sum(1 for obj in base_collection.all_objects if obj.type == 'MESH' and not self.is_in_child_lod00(obj, base_collection))
+        total_objects = base_mesh_count * len(lods_to_generate)  # Only count selected LODs
         processed_objects = 0
 
         # Set color tag for base LOD
@@ -380,7 +411,9 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         item.ui_rdf = True
         item.ui_rdv = True
 
-        for i in range(1, 4):  # Generate LOD01, LOD02, LOD03
+        # Process LODs in order to ensure LOD02 exists before LOD03
+        # First pass: LOD01 and LOD02
+        for i in [lod for lod in lods_to_generate if lod != 3]:
             lod_name = f"{base_name}_LOD{i:02d}"
             print(f"Looking for/creating LOD collection: '{lod_name}'")
             lod_collection = bpy.data.collections.get(lod_name)
@@ -411,18 +444,48 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             angle = scn.lod.decimate_angle_increment * i
             
             # Print method being used for this LOD
-            method = "shrinkwrap" if i == 3 else "decimate"
+            method = "decimate"  # Now using decimate for all LODs in mixed mode
             print(f"  Generating LOD{i:02d} using {method} method")
             
             self.process_objects(base_collection, lod_collection, i, angle, scn, context)
             
-            processed_objects += total_objects // 3
+            processed_objects += base_mesh_count
             scn.lod.progress = (processed_objects / total_objects) * 100
             try:
                 context.workspace.status_text_set(f"Generating LODs: {scn.lod.progress:.1f}%")
             except:
                 pass  # Fallback for older Blender versions
             bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+
+        # Second pass: LOD03 (if selected)
+        if 3 in lods_to_generate:
+            print(f"=== Processing LOD03 from LOD02 ===")
+            lod03_name = f"{base_name}_LOD03"
+            lod03_collection = bpy.data.collections.get(lod03_name)
+            
+            if not lod03_collection:
+                lod03_collection = bpy.data.collections.new(lod03_name)
+                bpy.context.scene.collection.children.link(lod03_collection)
+                print(f"  Created new collection: '{lod03_name}'")
+            else:
+                print(f"  Found existing collection: '{lod03_name}'")
+                # Clear existing objects in the collection
+                self.clear_collection(lod03_collection)
+            
+            # Set color tag for LOD03 collection
+            lod03_collection.color_tag = 'COLOR_04'
+            
+            # Copy collection structure from base collection for LOD03
+            self.copy_collection_structure(base_collection, lod03_collection, 3, 'COLOR_04')
+            
+            # Add LOD03 to the list
+            item = scn.lod.lod_list.add()
+            item.ui_lod = lod03_collection
+            item.ui_dsp = True
+            
+            # Process LOD03 from LOD02
+            print(f"  Generating LOD03 using decimate method from LOD02")
+            self.process_objects(base_collection, lod03_collection, 3, scn.lod.decimate_angle_increment * 3, scn, context)
 
         scn.lod.progress = 0
         try:
@@ -490,13 +553,16 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         
         method_description = ""
         if generation_method == 'MIXED':
-            method_description = "LOD01-02: Decimate, LOD03: Shrinkwrap"
+            method_description = "All LODs: Decimate"
         elif generation_method == 'DECIMATE_ONLY':
             method_description = "All LODs: Decimate"
         elif generation_method == 'SHRINKWRAP_ONLY':
             method_description = "All LODs: Shrinkwrap"
         
-        self.report({'INFO'}, f"LODs generated for {size_description} object ({object_size:.2f}m). Method: {method_description}. Vertex Colors: {vertex_color_mode}. MSFS LOD values: [4.0, 3.0, 2.0, 1.0]")
+        # Create LOD list string for the report
+        lod_list_str = ", ".join([f"LOD{i:02d}" for i in lods_to_generate])
+        
+        self.report({'INFO'}, f"Generated {lod_list_str} for {size_description} object ({object_size:.2f}m). Method: {method_description}. Vertex Colors: {vertex_color_mode}. MSFS LOD values: [4.0, 3.0, 2.0, 1.0]")
         return {'FINISHED'}
 
     def create_white_vertex_colors(self, obj):
@@ -517,183 +583,6 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
                 color_attr.data[i].color = (1.0, 1.0, 1.0, 1.0)
             print(f"    Applied pure white vertex colors to {obj.name}")
 
-    def bake_to_vertex_colors(self, obj):
-        """Bake MSFS albedo texture to vertex colors using Blender's proper baking system."""
-        if obj.type != 'MESH':
-            return
-        
-        base_collection = find_base_collection()
-        if not base_collection:
-            print(f"    Warning: Could not find base collection for vertex color baking")
-            self.create_white_vertex_colors(obj)
-            return
-        
-        # Find the MSFS albedo texture from the corresponding LOD00 object
-        albedo_texture = self.get_msfs_albedo_texture_from_lod00(base_collection, obj)
-        
-        if not albedo_texture:
-            print(f"    Warning: No MSFS albedo texture found, using white vertex colors")
-            self.create_white_vertex_colors(obj)
-            return
-        
-        # Verify the texture has actual image data
-        if not albedo_texture.pixels or albedo_texture.size[0] == 0 or albedo_texture.size[1] == 0:
-            print(f"    Warning: Texture '{albedo_texture.name}' has no pixel data, using white vertex colors")
-            self.create_white_vertex_colors(obj)
-            return
-        
-        print(f"    Using ALBEDO texture for baking: '{albedo_texture.name}' ({albedo_texture.size[0]}x{albedo_texture.size[1]})")
-        
-        # Determine if this is LOD03 for special brightness handling
-        is_lod03 = obj.name.endswith("_LOD03")
-        print(f"    Target object: {obj.name} (LOD03: {is_lod03})")
-        
-        # Perform vertex color baking using Blender's proper baking system
-        try:
-            # Store current state
-            original_selection = bpy.context.selected_objects
-            original_active = bpy.context.active_object
-            original_mode = bpy.context.mode
-            original_render_engine = bpy.context.scene.render.engine
-            
-            # Step 1: Create vertex color layer
-            if not obj.data.color_attributes:
-                obj.data.color_attributes.new(name="Color", type='FLOAT_COLOR', domain='CORNER')
-            
-            # Set Color as the active color attribute
-            color_attr = obj.data.color_attributes.get("Color")
-            if color_attr:
-                obj.data.color_attributes.active_color = color_attr
-            
-            # Step 2: Create and assign material with the albedo texture
-            # Clear existing materials
-            obj.data.materials.clear()
-            
-            # Create a material for baking
-            bake_material = bpy.data.materials.new(name=f"{obj.name}_BakeMaterial")
-            bake_material.use_nodes = True
-            nodes = bake_material.node_tree.nodes
-            links = bake_material.node_tree.links
-            
-            # Clear default nodes
-            nodes.clear()
-            
-            # Create nodes for a simple setup
-            output_node = nodes.new(type='ShaderNodeOutputMaterial')
-            output_node.location = (400, 0)
-            
-            bsdf_node = nodes.new(type='ShaderNodeBsdfPrincipled')
-            bsdf_node.location = (200, 0)
-            
-            tex_image_node = nodes.new(type='ShaderNodeTexImage')
-            tex_image_node.image = albedo_texture
-            tex_image_node.location = (0, 0)
-            
-            # Apply brightness adjustment for LOD03
-            if is_lod03:
-                # Add Gamma node for brightness boost
-                gamma_node = nodes.new(type='ShaderNodeGamma')
-                gamma_node.location = (200, 0)
-                gamma_node.inputs['Gamma'].default_value = 0.4  # Very low gamma for extreme brightening
-                
-                # Add Bright/Contrast node for additional brightness
-                bright_contrast = nodes.new(type='ShaderNodeBrightContrast')
-                bright_contrast.location = (300, 0)
-                bright_contrast.inputs['Bright'].default_value = 0.8  # High brightness boost
-                bright_contrast.inputs['Contrast'].default_value = -0.3  # Reduce contrast to prevent clipping
-                
-                # Add ColorRamp for aggressive brightness curve
-                colorramp_node = nodes.new(type='ShaderNodeValToRGB')
-                colorramp_node.location = (100, 0)
-                # Set up an aggressive brightening curve
-                colorramp_node.color_ramp.elements[0].position = 0.0
-                colorramp_node.color_ramp.elements[0].color = (0.4, 0.4, 0.4, 1.0)  # Lift blacks significantly
-                colorramp_node.color_ramp.elements[1].position = 1.0
-                colorramp_node.color_ramp.elements[1].color = (1.5, 1.5, 1.5, 1.0)  # Boost whites beyond 1.0
-                
-                # Connect: Texture -> ColorRamp -> Gamma -> Bright/Contrast -> BSDF -> Output
-                links.new(tex_image_node.outputs['Color'], colorramp_node.inputs['Fac'])
-                links.new(colorramp_node.outputs['Color'], gamma_node.inputs['Color'])
-                links.new(gamma_node.outputs['Color'], bright_contrast.inputs['Color'])
-                links.new(bright_contrast.outputs['Color'], bsdf_node.inputs['Base Color'])
-            else:
-                # Direct connection for normal LODs
-                links.new(tex_image_node.outputs['Color'], bsdf_node.inputs['Base Color'])
-            
-            links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
-            
-            # Assign material to object
-            obj.data.materials.append(bake_material)
-            
-            # Step 3: Switch renderer to Cycles
-            bpy.context.scene.render.engine = 'CYCLES'
-            
-            # Step 4: Set up the object for baking
-            bpy.ops.object.select_all(action='DESELECT')
-            obj.select_set(True)
-            bpy.context.view_layer.objects.active = obj
-            
-            # Switch to object mode if needed
-            if bpy.context.mode != 'OBJECT':
-                bpy.ops.object.mode_set(mode='OBJECT')
-            
-            # Step 5: Configure bake settings and bake
-            # Set bake type to Diffuse
-            bpy.context.scene.cycles.bake_type = 'DIFFUSE'
-            
-            # Configure influence settings
-            bpy.context.scene.render.bake.use_pass_direct = False
-            bpy.context.scene.render.bake.use_pass_indirect = False
-            bpy.context.scene.render.bake.use_pass_color = True
-            
-            # Set output to vertex colors
-            bpy.context.scene.render.bake.target = 'VERTEX_COLORS'
-            
-            # Clear existing vertex colors first
-            for i in range(len(color_attr.data)):
-                color_attr.data[i].color = (1.0, 1.0, 1.0, 1.0)
-            
-            # Perform the bake
-            bpy.ops.object.bake(type='DIFFUSE')
-            
-            # Post-process vertex colors for LOD03 to compensate for shrinkwrap darkening
-            if is_lod03:
-                print(f"    Applying post-bake brightness compensation for LOD03: {obj.name}")
-                for i in range(len(color_attr.data)):
-                    current_color = color_attr.data[i].color
-                    # Apply aggressive brightness boost: gamma correction + additive brightness
-                    brightened_color = (
-                        min(1.0, pow(current_color[0], 0.5) * 1.4 + 0.2),  # Red channel
-                        min(1.0, pow(current_color[1], 0.5) * 1.4 + 0.2),  # Green channel  
-                        min(1.0, pow(current_color[2], 0.5) * 1.4 + 0.2),  # Blue channel
-                        current_color[3]  # Alpha unchanged
-                    )
-                    color_attr.data[i].color = brightened_color
-                print(f"    Applied post-bake brightness compensation to {len(color_attr.data)} vertex colors")
-            
-            print(f"    Successfully baked vertex colors from MSFS albedo texture '{albedo_texture.name}' to {obj.name}")
-            
-            # Clean up: remove the temporary material
-            obj.data.materials.clear()
-            bpy.data.materials.remove(bake_material)
-            
-        except Exception as e:
-            print(f"    Warning: Vertex color baking failed for {obj.name}: {str(e)}")
-            # Fallback to white vertex colors
-            self.create_white_vertex_colors(obj)
-        
-        finally:
-            # Restore original state
-            try:
-                bpy.context.scene.render.engine = original_render_engine
-                bpy.ops.object.select_all(action='DESELECT')
-                for selected_obj in original_selection:
-                    if selected_obj and selected_obj.name in bpy.data.objects:
-                        selected_obj.select_set(True)
-                if original_active and original_active.name in bpy.data.objects:
-                    bpy.context.view_layer.objects.active = original_active
-            except Exception as restore_error:
-                print(f"    Warning: Could not fully restore original state: {str(restore_error)}")
 
     def bake_to_vertex_colors_with_original_materials(self, obj, original_materials):
         """Bake vertex colors using the original LOD00 materials."""
@@ -764,31 +653,36 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             self.copy_collection_structure(child, new_child, lod_level, color_tag)
 
     def process_objects(self, source_collection, target_collection, lod_level, angle, scn, context):
-        for obj in source_collection.objects:
-            if obj.type == 'MESH' and not self.is_in_child_lod00(obj, source_collection):
-                # Check if the object is too small for higher LODs
-                if scn.lod.small_object_threshold > 0 and self.is_object_too_small(obj, scn.lod.small_object_threshold):
-                    continue
+        # Special handling for LOD03 - copy from LOD02 instead of base collection
+        if lod_level == 3:
+            self.process_lod03_from_lod02(source_collection, target_collection, lod_level, angle, scn, context)
+        else:
+            # Normal processing for LOD01 and LOD02
+            for obj in source_collection.objects:
+                if obj.type == 'MESH' and not self.is_in_child_lod00(obj, source_collection):
+                    # Check if the object is too small for higher LODs
+                    if scn.lod.small_object_threshold > 0 and self.is_object_too_small(obj, scn.lod.small_object_threshold):
+                        continue
 
-                new_obj = obj.copy()
-                new_obj.data = obj.data.copy()
-                target_collection.objects.link(new_obj)
-                
-                # Store original materials for vertex color operations
-                original_materials = [slot.material for slot in obj.material_slots if slot.material]
-                
-                # Rename the object first
-                new_obj.name = f"{obj.name}_LOD{lod_level:02d}"
-                
-                # Apply vertex colors based on selected mode and LOD level
-                self.apply_vertex_colors_by_mode(new_obj, lod_level, original_materials, scn.lod.vertex_color_mode)
-                
-                # Apply LOD generation method based on selection
-                final_obj = self.apply_lod_generation_method(new_obj, obj, lod_level, angle, scn, context, target_collection, original_materials)
-                
-                # Merge vertices by distance for the final object
-                if final_obj:
-                    self.merge_vertices_by_distance(final_obj, context)
+                    new_obj = obj.copy()
+                    new_obj.data = obj.data.copy()
+                    target_collection.objects.link(new_obj)
+                    
+                    # Store original materials for vertex color operations
+                    original_materials = [slot.material for slot in obj.material_slots if slot.material]
+                    
+                    # Rename the object first
+                    new_obj.name = f"{obj.name}_LOD{lod_level:02d}"
+                    
+                    # Apply vertex colors based on selected mode and LOD level
+                    self.apply_vertex_colors_by_mode(new_obj, lod_level, original_materials, scn.lod.vertex_color_mode)
+                    
+                    # Apply LOD generation method based on selection
+                    final_obj = self.apply_lod_generation_method(new_obj, obj, lod_level, angle, scn, context, target_collection, original_materials)
+                    
+                    # Merge vertices by distance for the final object
+                    if final_obj:
+                        self.merge_vertices_by_distance(final_obj, context)
                 
             else:
                 # For non-mesh objects (e.g., lights), just duplicate them
@@ -803,6 +697,78 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             child_target = next((c for c in target_collection.children if c.name.startswith(child.name)), None)
             if child_target:
                 self.process_objects(child, child_target, lod_level, angle, scn, context)
+
+    def process_lod03_from_lod02(self, base_collection, target_collection, lod_level, angle, scn, context):
+        """Simple LOD03 processing by copying from LOD02 objects."""
+        # Get the base name from the base collection
+        base_name = get_base_name_from_collection(base_collection)
+        if not base_name:
+            print(f"    Warning: Could not get base name for LOD03 processing")
+            return
+        
+        # Find the LOD02 collection
+        lod02_collection_name = f"{base_name}_LOD02"
+        lod02_collection = bpy.data.collections.get(lod02_collection_name)
+        
+        if not lod02_collection:
+            print(f"    Warning: LOD02 collection '{lod02_collection_name}' not found, using base collection instead")
+            # Fallback to normal processing from base collection
+            for obj in base_collection.objects:
+                if obj.type == 'MESH' and not self.is_in_child_lod00(obj, base_collection):
+                    if scn.lod.small_object_threshold > 0 and self.is_object_too_small(obj, scn.lod.small_object_threshold):
+                        continue
+
+                    new_obj = obj.copy()
+                    new_obj.data = obj.data.copy()
+                    target_collection.objects.link(new_obj)
+                    
+                    original_materials = [slot.material for slot in obj.material_slots if slot.material]
+                    new_obj.name = f"{obj.name}_LOD{lod_level:02d}"
+                    
+                    # Apply vertex colors - LOD03 gets gray colors as fallback
+                    self.create_gray_vertex_colors(new_obj)
+                    new_obj.data.materials.clear()
+                    
+                    # Apply decimate
+                    self.apply_decimate_method(new_obj, lod_level, angle)
+                    self.merge_vertices_by_distance(new_obj, context)
+            return
+        
+        print(f"    Processing LOD03 by copying from LOD02 collection: '{lod02_collection_name}'")
+        
+        # Simple copying from LOD02 objects
+        try:
+            for obj in lod02_collection.objects:
+                if obj.type == 'MESH':
+                    print(f"    Copying LOD02 object '{obj.name}' to create LOD03")
+                    
+                    # Copy the LOD02 object (which already has baked vertex colors)
+                    new_obj = obj.copy()
+                    new_obj.data = obj.data.copy()
+                    target_collection.objects.link(new_obj)
+                    
+                    # Rename for LOD03
+                    original_name = obj.name.replace("_LOD02", "")  # Remove LOD02 suffix
+                    new_obj.name = f"{original_name}_LOD03"
+                    
+                    print(f"    Created LOD03 object '{new_obj.name}' with inherited vertex colors")
+                    
+                    # Apply additional decimate at next angle increment for LOD03
+                    additional_angle = scn.lod.decimate_angle_increment * 4  # LOD03 gets angle * 4
+                    decimate = new_obj.modifiers.new(name="LOD03_Decimate", type='DECIMATE')
+                    decimate.decimate_type = 'DISSOLVE'
+                    decimate.angle_limit = additional_angle * (3.14159 / 180)  # Convert to radians
+                    decimate.use_dissolve_boundaries = False
+                    decimate.delimit = {'UV'}
+                    
+                    print(f"    Added additional decimate modifier with {additional_angle}° angle for LOD03")
+                    
+                    # Merge vertices by distance
+                    self.merge_vertices_by_distance(new_obj, context)
+                
+        except Exception as e:
+            print(f"    Error during LOD03 processing: {str(e)}")
+            print(f"    Falling back to gray vertex colors for LOD03")
     
     def apply_vertex_colors_by_mode(self, obj, lod_level, original_materials, vertex_color_mode):
         """Apply vertex colors based on the selected vertex color mode."""
@@ -815,15 +781,13 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             return
         
         if vertex_color_mode == 'AUTO':
-            # LOD02 - bake from LOD00, LOD03 - gray colors
+            # LOD02 - bake from LOD00, LOD03 - inherit from LOD02
             if lod_level == 2:  # LOD02 - bake from LOD00
                 self.bake_lod00_albedo_to_vertex_colors(obj)
                 obj.data.materials.clear()  # Remove materials after baking
                 print(f"    Baked LOD00 albedo to vertex colors (AUTO mode)")
-            elif lod_level == 3:  # LOD03 - simple gray colors
-                self.create_gray_vertex_colors(obj)
-                obj.data.materials.clear()  # Remove materials 
-                print(f"    Applied gray vertex colors (AUTO mode)")
+            elif lod_level == 3:  # LOD03 - will inherit vertex colors from LOD02 during copying
+                print(f"    LOD03 will inherit vertex colors from LOD02 (AUTO mode)")
                 
         elif vertex_color_mode == 'WHITE_ONLY':
             # Apply white vertex colors to LOD02 and LOD03 as well
@@ -831,22 +795,17 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             print(f"    Applied pure white vertex colors (WHITE_ONLY mode)")
             
         elif vertex_color_mode == 'BAKE_ALL':
-            # Only LOD02 gets baking, LOD03 gets gray
+            # LOD02 gets baking, LOD03 inherits from LOD02
             if lod_level == 2:  # LOD02 - bake from LOD00
                 self.bake_lod00_albedo_to_vertex_colors(obj)
                 obj.data.materials.clear()  # Remove materials after baking
                 print(f"    Baked LOD00 albedo to vertex colors (BAKE_ALL mode)")
-            elif lod_level == 3:  # LOD03 - simple gray colors
-                self.create_gray_vertex_colors(obj)
-                obj.data.materials.clear()  # Remove materials
-                print(f"    Applied gray vertex colors (BAKE_ALL mode)")
+            elif lod_level == 3:  # LOD03 - will inherit vertex colors from LOD02 during copying
+                print(f"    LOD03 will inherit vertex colors from LOD02 (BAKE_ALL mode)")
                 
         elif vertex_color_mode == 'TRANSFER_ALL':
-            # Only LOD03 gets gray colors, LOD02 gets white
-            if lod_level == 2:  # LOD02 - white colors
-                self.create_white_vertex_colors(obj)
-                print(f"    Applied white vertex colors (TRANSFER_ALL mode)")
-            elif lod_level == 3:  # LOD03 - simple gray colors
+            # LOD02 and LOD03 get gray colors
+            if lod_level == 2 or lod_level == 3:  # LOD02 and LOD03 - gray colors
                 self.create_gray_vertex_colors(obj)
                 print(f"    Applied gray vertex colors (TRANSFER_ALL mode)")
     
@@ -858,10 +817,8 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         print(f"  Applying LOD generation (Method: {generation_method}) for LOD{lod_level:02d}")
         
         if generation_method == 'MIXED':
-            # Original mixed behavior: Decimate for LOD01-02, Shrinkwrap for LOD03
-            if lod_level == 3:
-                return self.apply_shrinkwrap_method(new_obj, original_obj, lod_level, scn, context, target_collection, original_materials, vertex_color_mode)
-            elif lod_level == 1 or lod_level == 2:
+            # Modified mixed behavior: Decimate for all LODs (LOD01-03)
+            if lod_level >= 1:
                 self.apply_decimate_method(new_obj, lod_level, angle)
                 
         elif generation_method == 'DECIMATE_ONLY':
@@ -1053,124 +1010,6 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         
         print(f"    Merged vertices by distance (0.0001m) for {obj.name}")
 
-    def setup_albedo_material_for_baking(self, obj, albedo_texture):
-        """
-        Set up a simple material on the object using only the albedo texture for baking.
-        
-        Args:
-            obj: The object to apply the material to
-            albedo_texture: The albedo texture to use
-        """
-        # Clear existing materials
-        obj.data.materials.clear()
-        
-        # Create a new simple material for baking
-        bake_material = bpy.data.materials.new(name=f"{obj.name}_AlbedoBake")
-        bake_material.use_nodes = True
-        bake_material.node_tree.nodes.clear()
-        
-        # Create nodes
-        output_node = bake_material.node_tree.nodes.new(type='ShaderNodeOutputMaterial')
-        output_node.location = (600, 0)
-        
-        emission_node = bake_material.node_tree.nodes.new(type='ShaderNodeEmission')
-        emission_node.location = (400, 0)
-        emission_node.inputs['Strength'].default_value = 1.5  # Enhanced emission for brighter LOD02
-        
-        # Add RGB Curves node for brightness control
-        curves_node = bake_material.node_tree.nodes.new(type='ShaderNodeRGBCurve')
-        curves_node.location = (200, 0)
-        # Adjust the curve to brighten the colors
-        curve = curves_node.mapping.curves[3]  # Combined curve
-        curve.points[0].location = (0.0, 0.0)
-        curve.points[1].location = (1.0, 1.0)
-        # Add a point to brighten mid-tones
-        curve.points.new(0.5, 0.75)
-        curves_node.mapping.update()
-        
-        # Add Gamma node for additional brightness
-        gamma_node = bake_material.node_tree.nodes.new(type='ShaderNodeGamma')
-        gamma_node.location = (0, 0)
-        gamma_node.inputs['Gamma'].default_value = 0.6  # Lower gamma = brighter
-        
-        texture_node = bake_material.node_tree.nodes.new(type='ShaderNodeTexImage')
-        texture_node.image = albedo_texture
-        texture_node.location = (-200, 0)
-        
-        # Connect nodes: Texture -> Gamma -> Curves -> Emission -> Output
-        bake_material.node_tree.links.new(texture_node.outputs['Color'], gamma_node.inputs['Color'])
-        bake_material.node_tree.links.new(gamma_node.outputs['Color'], curves_node.inputs['Color'])
-        bake_material.node_tree.links.new(curves_node.outputs['Color'], emission_node.inputs['Color'])
-        bake_material.node_tree.links.new(emission_node.outputs['Emission'], output_node.inputs['Surface'])
-        
-        # Apply the material to the object
-        obj.data.materials.append(bake_material)
-        
-        print(f"Created albedo baking material '{bake_material.name}' with brightness enhancement for {obj.name}")
-
-    def setup_albedo_material_for_lod03_baking(self, obj, albedo_texture):
-        """
-        Set up a material on the LOD03 shrinkwrap object with extreme brightness compensation.
-        Uses multiple brightness enhancement techniques for shrinkwrapped geometry.
-        
-        Args:
-            obj: The LOD03 object to apply the material to
-            albedo_texture: The albedo texture to use
-        """
-        # Clear existing materials
-        obj.data.materials.clear()
-        
-        # Create a new simple material for baking
-        bake_material = bpy.data.materials.new(name=f"{obj.name}_AlbedoBake_LOD03")
-        bake_material.use_nodes = True
-        bake_material.node_tree.nodes.clear()
-        
-        # Create nodes
-        output_node = bake_material.node_tree.nodes.new(type='ShaderNodeOutputMaterial')
-        output_node.location = (800, 0)
-        
-        emission_node = bake_material.node_tree.nodes.new(type='ShaderNodeEmission')
-        emission_node.location = (600, 0)
-        emission_node.inputs['Strength'].default_value = 2.0  # Higher base emission for LOD03
-        
-        # Add RGB Curves node for aggressive brightness control
-        curves_node = bake_material.node_tree.nodes.new(type='ShaderNodeRGBCurve')
-        curves_node.location = (400, 0)
-        # Adjust the curve to significantly brighten the colors
-        curve = curves_node.mapping.curves[3]  # Combined curve
-        curve.points[0].location = (0.0, 0.3)  # Lift blacks
-        curve.points[1].location = (1.0, 1.0)
-        # Add points to create an aggressive brightening curve
-        curve.points.new(0.25, 0.6)
-        curve.points.new(0.5, 0.85)
-        curves_node.mapping.update()
-        
-        # Add Bright/Contrast node
-        bright_contrast = bake_material.node_tree.nodes.new(type='ShaderNodeBrightContrast')
-        bright_contrast.location = (200, 0)
-        bright_contrast.inputs['Bright'].default_value = 0.5  # Increase brightness
-        bright_contrast.inputs['Contrast'].default_value = -0.2  # Reduce contrast to prevent clipping
-        
-        # Add Gamma node for additional brightness
-        gamma_node = bake_material.node_tree.nodes.new(type='ShaderNodeGamma')
-        gamma_node.location = (0, 0)
-        gamma_node.inputs['Gamma'].default_value = 0.4  # Very low gamma for extreme brightening
-        
-        texture_node = bake_material.node_tree.nodes.new(type='ShaderNodeTexImage')
-        texture_node.image = albedo_texture
-        texture_node.location = (-200, 0)
-        
-        # Connect nodes: Texture -> Gamma -> Bright/Contrast -> Curves -> Emission -> Output
-        bake_material.node_tree.links.new(texture_node.outputs['Color'], gamma_node.inputs['Color'])
-        bake_material.node_tree.links.new(gamma_node.outputs['Color'], bright_contrast.inputs['Color'])
-        bake_material.node_tree.links.new(bright_contrast.outputs['Color'], curves_node.inputs['Color'])
-        bake_material.node_tree.links.new(curves_node.outputs['Color'], emission_node.inputs['Color'])
-        bake_material.node_tree.links.new(emission_node.outputs['Emission'], output_node.inputs['Surface'])
-        
-        # Apply the material to the object
-        obj.data.materials.append(bake_material)
-        
-        print(f"Created LOD03 albedo baking material '{bake_material.name}' with extreme brightness enhancement for {obj.name}")
 
     def get_msfs_albedo_texture_from_lod00(self, base_collection, target_obj):
         """
@@ -1257,6 +1096,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         
         print(f"No ALBEDO texture found for LOD00 object '{lod00_obj.name}'")
         return None
+
 
     def bake_lod00_albedo_to_vertex_colors(self, obj):
         """Bake LOD00 albedo texture to vertex colors using Blender's proper baking system."""
@@ -1571,6 +1411,7 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             for i in range(len(color_attr.data)):
                 color_attr.data[i].color = (0.7, 0.7, 0.7, 1.0)
             print(f"    Applied gray vertex colors to {obj.name}")
+
 
 class LODIFY_OT_set_default_lod_values(bpy.types.Operator):
     bl_idname = "lodify.set_default_lod_values"

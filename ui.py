@@ -93,6 +93,16 @@ class LODIFY_PT_generation_settings(bpy.types.Panel):
         col.label(text="LOD Generation Method", icon='MODIFIER')
         col.prop(lod_props, "lod_generation_method", text="")
         
+        # LOD Selection
+        col.separator()
+        col.label(text="LOD Selection", icon='OUTLINER')
+        
+        # Create a row with checkboxes for LOD selection
+        row = col.row(align=True)
+        row.prop(lod_props, "generate_lod01", text="LOD01")
+        row.prop(lod_props, "generate_lod02", text="LOD02") 
+        row.prop(lod_props, "generate_lod03", text="LOD03")
+        
         # Basic Settings
         col.separator()
         col.label(text="Basic Settings", icon='SETTINGS')
@@ -178,7 +188,7 @@ class LODIFY_PT_generation_actions(bpy.types.Panel):
         
         # Set button text based on generation method
         if lod_props.lod_generation_method == 'MIXED':
-            button_text = "Generate LODs (Mixed Method)"
+            button_text = "Generate LODs (All Decimate)"
         elif lod_props.lod_generation_method == 'DECIMATE_ONLY':
             button_text = "Generate LODs (Decimate Only)"
         else:

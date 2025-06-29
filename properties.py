@@ -71,7 +71,7 @@ class LODIFY_props_scn(bpy.types.PropertyGroup):
         name="LOD Generation Method",
         description="Choose the method for generating LODs",
         items=[
-            ('MIXED', "Mixed (Decimate + Shrinkwrap)", "Use decimate for LOD01-02, shrinkwrap for LOD03 (recommended)"),
+            ('MIXED', "Mixed (All Decimate)", "Use decimate method for all LODs (recommended)"),
             ('DECIMATE_ONLY', "Decimate Only", "Use decimate method for all LODs"),
             ('SHRINKWRAP_ONLY', "Shrinkwrap Only", "Use shrinkwrap method for all LODs (experimental)")
         ],
@@ -89,12 +89,31 @@ class LODIFY_props_scn(bpy.types.PropertyGroup):
         name="Vertex Color Mode",
         description="How to handle vertex colors in LOD generation",
         items=[
-            ('AUTO', "Automatic", "LOD00-01: white colors, LOD02-03: baked from LOD00 albedo texture"),
+            ('AUTO', "Automatic", "LOD00-01: white, LOD02: baked from albedo, LOD03: inherited from LOD02"),
             ('WHITE_ONLY', "White Only", "Apply white vertex colors to all LODs"),
-            ('BAKE_ALL', "Bake All", "LOD00: white colors, LOD01-03: baked from LOD00 albedo texture"),
-            ('TRANSFER_ALL', "Transfer All", "Transfer vertex colors from LOD00 to all LODs")
+            ('BAKE_ALL', "Bake All", "LOD00-01: white, LOD02: baked from albedo, LOD03: inherited from LOD02"),
+            ('TRANSFER_ALL', "Transfer All", "LOD00-01: white colors, LOD02-03: gray colors")
         ],
         default='AUTO'
+    )
+    
+    # LOD Selection Settings
+    generate_lod01: BoolProperty(
+        name="Generate LOD01",
+        description="Generate LOD01 level",
+        default=True
+    )
+    
+    generate_lod02: BoolProperty(
+        name="Generate LOD02", 
+        description="Generate LOD02 level",
+        default=True
+    )
+    
+    generate_lod03: BoolProperty(
+        name="Generate LOD03",
+        description="Generate LOD03 level", 
+        default=True
     )
 
 classes = (
