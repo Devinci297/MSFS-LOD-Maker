@@ -1,6 +1,8 @@
 # __init__.py
 import bpy
 import logging
+import os
+import tempfile
 
 if "bpy" in locals():
     import importlib
@@ -20,7 +22,7 @@ bl_info = {
     "name": "MSFS LOD Maker",
     "description": "Microsoft Flight Simulator LOD system for collections in Blender 3.6+, with intelligent LOD generation and automatic MSFS optimization",
     "author": "Devinci (inspired by DB3D's Lodify addon)",
-    "version": (0, 2, 0),
+    "version": (0, 1, 4),
     "blender": (3, 6, 0),  # Updated to support Blender 3.6+ (including 4.x)
     "location": "Properties > Scene > Level of Detail Collections",
     "warning": "",
@@ -33,8 +35,9 @@ bl_info = {
 def setup_logging():
     """Setup logging for the addon with improved error handling."""
     try:
+        log_path = os.path.join(tempfile.gettempdir(), 'msfs_lod_maker.log')
         logging.basicConfig(
-            filename='lodify_addon.log', 
+            filename=log_path, 
             level=logging.DEBUG, 
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             filemode='w'  # Overwrite log file each time
