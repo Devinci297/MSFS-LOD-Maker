@@ -431,19 +431,11 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
 
     def execute(self, context):
         scn = context.scene
-        base_collection = find_base_collection()
+        all_base_collections = find_all_active_base_collections()
         
-        if not base_collection:
+        if not all_base_collections:
             self.report({'ERROR'}, "Base LOD collection (ending with _LOD00) not found")
             return {'CANCELLED'}
-        
-        base_name = get_base_name_from_collection(base_collection)
-        
-        if not base_name:
-            self.report({'ERROR'}, f"Could not extract base name from collection '{base_collection.name}'")
-            return {'CANCELLED'}
-        
-        print(f"Base collection: '{base_collection.name}' -> Base name: '{base_name}'")
         
         # Determine which LODs to generate based on user selection
         lods_to_generate = []
@@ -459,113 +451,135 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
             return {'CANCELLED'}
         
         print(f"Generating selected LODs: {lods_to_generate}")
-        
-        # Use optimal LOD values based on object size and MSFS recommendations
-        optimal_lod_values = get_lod_values(context, base_collection)
-        object_size = calculate_object_bounds(base_collection)
-        
-        print(f"Object size: {object_size:.2f}m")
-        print(f"Using optimal LOD values: {optimal_lod_values} (auto-set to default values)")
+        print(f"Found {len(all_base_collections)} active LOD00 collection(s)")
         
         # Clear existing list
         scn.lod.lod_list.clear()
         
-        # Apply pure white vertex colors to base LOD00 collection
-        print(f"=== Applying Pure White Vertex Colors to LOD00 ===")
-        for obj in base_collection.objects:
-            if obj.type == 'MESH':
-                self.create_white_vertex_colors(obj)
+        # Calculate grand total for progress across all base collections
+        grand_total_objects = 0
+        for bc in all_base_collections:
+            mesh_count = sum(1 for obj in bc.all_objects if obj.type == 'MESH' and not self.is_in_child_lod00(obj, bc))
+            grand_total_objects += mesh_count * len(lods_to_generate)
+        grand_processed_objects = 0
         
-        # Calculate total objects based on selected LODs
-        base_mesh_count = sum(1 for obj in base_collection.all_objects if obj.type == 'MESH' and not self.is_in_child_lod00(obj, base_collection))
-        total_objects = base_mesh_count * len(lods_to_generate)  # Only count selected LODs
-        processed_objects = 0
-
-        # Set color tag for base LOD
-        base_collection.color_tag = 'COLOR_01'
-        self.set_child_collection_colors(base_collection, 'COLOR_01')
+        generation_method = scn.lod.lod_generation_method
+        vertex_color_mode = scn.lod.vertex_color_mode
+        processed_collection_names = []
         
-        # Add base LOD to the list
-        item = scn.lod.lod_list.add()
-        item.ui_lod = base_collection
-        item.ui_rdf = True
-        item.ui_rdv = True
+        # Process each base collection
+        for base_collection in all_base_collections:
+            base_name = get_base_name_from_collection(base_collection)
+            
+            if not base_name:
+                print(f"Warning: Could not extract base name from collection '{base_collection.name}', skipping")
+                continue
+            
+            print(f"\n=== Processing base collection: '{base_collection.name}' -> Base name: '{base_name}' ===")
+            processed_collection_names.append(base_name)
+            
+            # Use optimal LOD values based on object size and MSFS recommendations
+            optimal_lod_values = get_lod_values(context, base_collection)
+            object_size = calculate_object_bounds(base_collection)
+            
+            print(f"Object size: {object_size:.2f}m")
+            print(f"Using optimal LOD values: {optimal_lod_values} (auto-set to default values)")
+            
+            # Apply pure white vertex colors to base LOD00 collection
+            print(f"=== Applying Pure White Vertex Colors to LOD00 ===")
+            for obj in base_collection.objects:
+                if obj.type == 'MESH':
+                    self.create_white_vertex_colors(obj)
+            
+            # Calculate objects for this base collection
+            base_mesh_count = sum(1 for obj in base_collection.all_objects if obj.type == 'MESH' and not self.is_in_child_lod00(obj, base_collection))
 
-        # Process LODs in order to ensure LOD02 exists before LOD03
-        # First pass: LOD01 and LOD02
-        for i in [lod for lod in lods_to_generate if lod != 3]:
-            lod_name = f"{base_name}_LOD{i:02d}"
-            print(f"Looking for/creating LOD collection: '{lod_name}'")
-            lod_collection = bpy.data.collections.get(lod_name)
+            # Set color tag for base LOD
+            base_collection.color_tag = 'COLOR_01'
+            self.set_child_collection_colors(base_collection, 'COLOR_01')
             
-            if not lod_collection:
-                lod_collection = bpy.data.collections.new(lod_name)
-                bpy.context.scene.collection.children.link(lod_collection)
-                print(f"  Created new collection: '{lod_name}'")
-            else:
-                print(f"  Found existing collection: '{lod_name}'")
-                # Clear existing objects in the collection
-                self.clear_collection(lod_collection)
-            
-            # Set color tag for LOD collection
-            color_tag = f'COLOR_0{i+1}'
-            lod_collection.color_tag = color_tag
-            
-            # Copy collection structure from base collection
-            self.copy_collection_structure(base_collection, lod_collection, i, color_tag)
-            
-            # Add LOD to the list
+            # Add base LOD to the list
             item = scn.lod.lod_list.add()
-            item.ui_lod = lod_collection
-            if i == 3:
+            item.ui_lod = base_collection
+            item.ui_rdf = True
+            item.ui_rdv = True
+
+            # Process LODs in order to ensure LOD02 exists before LOD03
+            # First pass: LOD01 and LOD02
+            for i in [lod for lod in lods_to_generate if lod != 3]:
+                lod_name = f"{base_name}_LOD{i:02d}"
+                print(f"Looking for/creating LOD collection: '{lod_name}'")
+                lod_collection = bpy.data.collections.get(lod_name)
+                
+                if not lod_collection:
+                    lod_collection = bpy.data.collections.new(lod_name)
+                    bpy.context.scene.collection.children.link(lod_collection)
+                    print(f"  Created new collection: '{lod_name}'")
+                else:
+                    print(f"  Found existing collection: '{lod_name}'")
+                    # Clear existing objects in the collection
+                    self.clear_collection(lod_collection)
+                
+                # Set color tag for LOD collection
+                color_tag = f'COLOR_0{i+1}'
+                lod_collection.color_tag = color_tag
+                
+                # Copy collection structure from base collection
+                self.copy_collection_structure(base_collection, lod_collection, i, color_tag)
+                
+                # Add LOD to the list
+                item = scn.lod.lod_list.add()
+                item.ui_lod = lod_collection
+                if i == 3:
+                    item.ui_dsp = True
+                
+                # Adjust angle for each LOD level (used for decimate in LOD01 and LOD02)
+                angle = scn.lod.decimate_angle_increment * i
+                
+                # Print method being used for this LOD
+                method = "decimate"  # Now using decimate for all LODs in mixed mode
+                print(f"  Generating LOD{i:02d} using {method} method")
+                
+                self.process_objects(base_collection, lod_collection, i, angle, scn, context)
+                
+                grand_processed_objects += base_mesh_count
+                if grand_total_objects > 0:
+                    scn.lod.progress = (grand_processed_objects / grand_total_objects) * 100
+                try:
+                    context.workspace.status_text_set(f"Generating LODs: {scn.lod.progress:.1f}%")
+                except:
+                    pass  # Fallback for older Blender versions
+                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+
+            # Second pass: LOD03 (if selected)
+            if 3 in lods_to_generate:
+                print(f"=== Processing LOD03 from LOD02 ===")
+                lod03_name = f"{base_name}_LOD03"
+                lod03_collection = bpy.data.collections.get(lod03_name)
+                
+                if not lod03_collection:
+                    lod03_collection = bpy.data.collections.new(lod03_name)
+                    bpy.context.scene.collection.children.link(lod03_collection)
+                    print(f"  Created new collection: '{lod03_name}'")
+                else:
+                    print(f"  Found existing collection: '{lod03_name}'")
+                    # Clear existing objects in the collection
+                    self.clear_collection(lod03_collection)
+                
+                # Set color tag for LOD03 collection
+                lod03_collection.color_tag = 'COLOR_04'
+                
+                # Copy collection structure from base collection for LOD03
+                self.copy_collection_structure(base_collection, lod03_collection, 3, 'COLOR_04')
+                
+                # Add LOD03 to the list
+                item = scn.lod.lod_list.add()
+                item.ui_lod = lod03_collection
                 item.ui_dsp = True
-            
-            # Adjust angle for each LOD level (used for decimate in LOD01 and LOD02)
-            angle = scn.lod.decimate_angle_increment * i
-            
-            # Print method being used for this LOD
-            method = "decimate"  # Now using decimate for all LODs in mixed mode
-            print(f"  Generating LOD{i:02d} using {method} method")
-            
-            self.process_objects(base_collection, lod_collection, i, angle, scn, context)
-            
-            processed_objects += base_mesh_count
-            scn.lod.progress = (processed_objects / total_objects) * 100
-            try:
-                context.workspace.status_text_set(f"Generating LODs: {scn.lod.progress:.1f}%")
-            except:
-                pass  # Fallback for older Blender versions
-            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-
-        # Second pass: LOD03 (if selected)
-        if 3 in lods_to_generate:
-            print(f"=== Processing LOD03 from LOD02 ===")
-            lod03_name = f"{base_name}_LOD03"
-            lod03_collection = bpy.data.collections.get(lod03_name)
-            
-            if not lod03_collection:
-                lod03_collection = bpy.data.collections.new(lod03_name)
-                bpy.context.scene.collection.children.link(lod03_collection)
-                print(f"  Created new collection: '{lod03_name}'")
-            else:
-                print(f"  Found existing collection: '{lod03_name}'")
-                # Clear existing objects in the collection
-                self.clear_collection(lod03_collection)
-            
-            # Set color tag for LOD03 collection
-            lod03_collection.color_tag = 'COLOR_04'
-            
-            # Copy collection structure from base collection for LOD03
-            self.copy_collection_structure(base_collection, lod03_collection, 3, 'COLOR_04')
-            
-            # Add LOD03 to the list
-            item = scn.lod.lod_list.add()
-            item.ui_lod = lod03_collection
-            item.ui_dsp = True
-            
-            # Process LOD03 from LOD02
-            print(f"  Generating LOD03 using decimate method from LOD02")
-            self.process_objects(base_collection, lod03_collection, 3, scn.lod.decimate_angle_increment * 3, scn, context)
+                
+                # Process LOD03 from LOD02
+                print(f"  Generating LOD03 using decimate method from LOD02")
+                self.process_objects(base_collection, lod03_collection, 3, scn.lod.decimate_angle_increment * 3, scn, context)
 
         scn.lod.progress = 0
         try:
@@ -611,25 +625,8 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         except Exception as e:
             print(f"Could not force scene update: {str(e)}")
         
-        # Final verification of LOD values
-        print(f"=== Final Verification ===")
-        try:
-            if hasattr(bpy.context.scene, 'msfs_multi_exporter_lod_groups'):
-                for group in bpy.context.scene.msfs_multi_exporter_lod_groups:
-                    if group.name == base_name:
-                        print(f"LOD Group '{group.name}' final values:")
-                        for i, lod in enumerate(group.lods[:4]):
-                            print(f"  LOD{i}: {lod.lod_value}")
-                        break
-        except Exception as e:
-            print(f"Could not verify final LOD values: {str(e)}")
-        
-        # Final report with object size and LOD values information
-        size_description = "very small" if object_size < 1.0 else "small" if object_size < 5.0 else "medium" if object_size < 20.0 else "large" if object_size < 100.0 else "very large"
-        
-        # Get method descriptions for the report
-        generation_method = scn.lod.lod_generation_method
-        vertex_color_mode = scn.lod.vertex_color_mode
+        # Final report
+        lod_list_str = ", ".join([f"LOD{i:02d}" for i in lods_to_generate])
         
         method_description = ""
         if generation_method == 'MIXED':
@@ -639,10 +636,8 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         elif generation_method == 'SHRINKWRAP_ONLY':
             method_description = "All LODs: Shrinkwrap"
         
-        # Create LOD list string for the report
-        lod_list_str = ", ".join([f"LOD{i:02d}" for i in lods_to_generate])
-        
-        self.report({'INFO'}, f"Generated {lod_list_str} for {size_description} object ({object_size:.2f}m). Method: {method_description}. Vertex Colors: {vertex_color_mode}. MSFS LOD values: [4.0, 3.0, 2.0, 1.0]")
+        collections_str = ", ".join(processed_collection_names)
+        self.report({'INFO'}, f"Generated {lod_list_str} for {len(processed_collection_names)} collection(s): [{collections_str}]. Method: {method_description}. Vertex Colors: {vertex_color_mode}.")
         return {'FINISHED'}
 
     def create_white_vertex_colors(self, obj):
