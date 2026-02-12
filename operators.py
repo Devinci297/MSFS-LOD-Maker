@@ -303,6 +303,13 @@ class LODIFY_OT_auto_setup(bpy.types.Operator):
     bl_label = "Auto Setup LOD Collections"
     bl_options = {'REGISTER', 'UNDO'}
 
+    def invoke(self, context, event):
+        base_collection = find_base_collection()
+        if not base_collection:
+            bpy.ops.lodify.confirm_create_base('INVOKE_DEFAULT', next_operator='lodify.auto_setup')
+            return {'CANCELLED'}
+        return self.execute(context)
+
     def execute(self, context):
         scn = context.scene
         base_collection = find_base_collection()
@@ -344,10 +351,83 @@ class LODIFY_OT_auto_setup(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class LODIFY_OT_confirm_create_base(bpy.types.Operator):
+    """Confirmation dialog to create a LOD00 base collection from scene objects."""
+    bl_idname = "lodify.confirm_create_base"
+    bl_label = "Create LOD00 Base Collection?"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    base_name: bpy.props.StringProperty(
+        name="Base Name",
+        description="Name for the base LOD00 collection (will have _LOD00 appended)",
+        default="Collection"
+    )
+
+    next_operator: bpy.props.StringProperty(
+        name="Next Operator",
+        description="Operator to call after creating the base collection",
+        default="lodify.generate_lod_decimate"
+    )
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=380)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="No _LOD00 base collection was found.", icon='ERROR')
+        layout.separator()
+        layout.label(text="All top-level scene objects will be moved into")
+        layout.label(text="a new LOD00 collection before proceeding.")
+        layout.separator()
+        layout.prop(self, "base_name", text="Base Name")
+
+    def execute(self, context):
+        scene = context.scene
+        collection_name = f"{self.base_name}_LOD00"
+
+        # Create the new LOD00 collection
+        lod00_collection = bpy.data.collections.new(collection_name)
+        scene.collection.children.link(lod00_collection)
+        print(f"Created base collection: '{collection_name}'")
+
+        # Move all top-level objects from the scene collection into the new LOD00 collection
+        objects_moved = 0
+        for obj in list(scene.collection.objects):
+            lod00_collection.objects.link(obj)
+            scene.collection.objects.unlink(obj)
+            objects_moved += 1
+            print(f"  Moved object '{obj.name}' into '{collection_name}'")
+
+        # Move any existing child collections into the LOD00 collection
+        for child_col in list(scene.collection.children):
+            if child_col == lod00_collection:
+                continue
+            scene.collection.children.unlink(child_col)
+            lod00_collection.children.link(child_col)
+            print(f"  Moved child collection '{child_col.name}' into '{collection_name}'")
+
+        self.report({'INFO'}, f"Created '{collection_name}' and moved {objects_moved} object(s) into it.")
+
+        # Call the next operator that was originally requested
+        try:
+            op_category, op_name = self.next_operator.split('.', 1)
+            getattr(getattr(bpy.ops, op_category), op_name)()
+        except Exception as e:
+            print(f"Warning: Could not call next operator '{self.next_operator}': {e}")
+        return {'FINISHED'}
+
+
 class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
     bl_idname = "lodify.generate_lod_decimate"
     bl_label = "Generate LODs (Decimate + Shrinkwrap)"
     bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        base_collection = find_base_collection()
+        if not base_collection:
+            bpy.ops.lodify.confirm_create_base('INVOKE_DEFAULT')
+            return {'CANCELLED'}
+        return self.execute(context)
 
     def execute(self, context):
         scn = context.scene
@@ -684,13 +764,13 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
                     if final_obj:
                         self.merge_vertices_by_distance(final_obj, context)
                 
-            else:
-                # For non-mesh objects (e.g., lights), just duplicate them
-                new_obj = obj.copy()
-                if obj.data:
-                    new_obj.data = obj.data.copy()
-                target_collection.objects.link(new_obj)
-                new_obj.name = f"{obj.name}_LOD{lod_level:02d}"
+                else:
+                    # For non-mesh objects (e.g., lights), just duplicate them
+                    new_obj = obj.copy()
+                    if obj.data:
+                        new_obj.data = obj.data.copy()
+                    target_collection.objects.link(new_obj)
+                    new_obj.name = f"{obj.name}_LOD{lod_level:02d}"
 
         # Process child collections
         for child in source_collection.children:
@@ -1419,6 +1499,13 @@ class LODIFY_OT_set_default_lod_values(bpy.types.Operator):
     bl_description = "Set LOD values to default values: 4, 3, 2, 1. MSFS artistic teams often use descending values (7,6,5,4,3,2,1) in XML, trusting the LOD system to automatically choose optimal LODs based on distance and performance limits"
     bl_options = {'REGISTER', 'UNDO'}
 
+    def invoke(self, context, event):
+        base_collection = find_base_collection()
+        if not base_collection:
+            bpy.ops.lodify.confirm_create_base('INVOKE_DEFAULT', next_operator='lodify.set_default_lod_values')
+            return {'CANCELLED'}
+        return self.execute(context)
+
     def execute(self, context):
         scn = context.scene
         base_collection = find_base_collection()
@@ -1454,6 +1541,13 @@ class LODIFY_OT_calculate_msfs_lod_values(bpy.types.Operator):
     bl_label = "Calculate & Set MSFS LOD Values"
     bl_description = "Calculate optimal LOD values based on object size and set them in MSFS Multi-Export addon"
     bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        base_collection = find_base_collection()
+        if not base_collection:
+            bpy.ops.lodify.confirm_create_base('INVOKE_DEFAULT', next_operator='lodify.calculate_msfs_lod_values')
+            return {'CANCELLED'}
+        return self.execute(context)
 
     def execute(self, context):
         scn = context.scene
@@ -1606,6 +1700,7 @@ def get_lod_values(context, base_collection):
 classes = (
     LODIFY_OT_list_actions,
     LODIFY_OT_auto_setup,
+    LODIFY_OT_confirm_create_base,
     LODIFY_OT_generate_lod_decimate,
     LODIFY_OT_set_default_lod_values,
     LODIFY_OT_calculate_msfs_lod_values,
