@@ -811,35 +811,43 @@ class LODIFY_OT_generate_lod_decimate(bpy.types.Operator):
         
         print(f"    Processing LOD03 by copying from LOD02 collection: '{lod02_collection_name}'")
         
-        # Simple copying from LOD02 objects
+        # Recursively copy from LOD02 collection tree into LOD03 target tree
+        self._copy_lod03_from_lod02_recursive(lod02_collection, target_collection, scn, context)
+    
+    def _copy_lod03_from_lod02_recursive(self, source_collection, target_collection, scn, context):
+        """Recursively copy LOD02 objects into matching LOD03 child collections."""
         try:
-            for obj in lod02_collection.objects:
+            for obj in source_collection.objects:
                 if obj.type == 'MESH':
                     print(f"    Copying LOD02 object '{obj.name}' to create LOD03")
                     
-                    # Copy the LOD02 object (which already has baked vertex colors)
                     new_obj = obj.copy()
                     new_obj.data = obj.data.copy()
                     target_collection.objects.link(new_obj)
                     
-                    # Rename for LOD03
-                    original_name = obj.name.replace("_LOD02", "")  # Remove LOD02 suffix
+                    original_name = obj.name.replace("_LOD02", "")
                     new_obj.name = f"{original_name}_LOD03"
                     
                     print(f"    Created LOD03 object '{new_obj.name}' with inherited vertex colors")
                     
-                    # Apply additional decimate at next angle increment for LOD03
-                    additional_angle = scn.lod.decimate_angle_increment * 4  # LOD03 gets angle * 4
+                    additional_angle = scn.lod.decimate_angle_increment * 4
                     decimate = new_obj.modifiers.new(name="LOD03_Decimate", type='DECIMATE')
                     decimate.decimate_type = 'DISSOLVE'
-                    decimate.angle_limit = additional_angle * (3.14159 / 180)  # Convert to radians
+                    decimate.angle_limit = additional_angle * (3.14159 / 180)
                     decimate.use_dissolve_boundaries = False
                     decimate.delimit = {'UV'}
                     
                     print(f"    Added additional decimate modifier with {additional_angle}° angle for LOD03")
-                    
-                    # Merge vertices by distance
                     self.merge_vertices_by_distance(new_obj, context)
+            
+            # Recurse into child collections
+            for child_src in source_collection.children:
+                expected_name = child_src.name.replace("LOD02", "LOD03")
+                child_tgt = target_collection.children.get(expected_name)
+                if child_tgt:
+                    self._copy_lod03_from_lod02_recursive(child_src, child_tgt, scn, context)
+                else:
+                    print(f"    Warning: No matching LOD03 child for '{child_src.name}' (expected '{expected_name}')")
                 
         except Exception as e:
             print(f"    Error during LOD03 processing: {str(e)}")
