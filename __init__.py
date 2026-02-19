@@ -22,7 +22,7 @@ bl_info = {
     "name": "MSFS LOD Maker",
     "description": "Microsoft Flight Simulator LOD system for collections in Blender 3.6+, with intelligent LOD generation and automatic MSFS optimization",
     "author": "Devinci (inspired by DB3D's Lodify addon)",
-    "version": (0, 1, 4),
+    "version": (0, 1, 5),
     "blender": (3, 6, 0),  # Updated to support Blender 3.6+ (including 4.x)
     "location": "Properties > Scene > Level of Detail Collections",
     "warning": "",

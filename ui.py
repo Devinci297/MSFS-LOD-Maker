@@ -161,6 +161,19 @@ class LODIFY_PT_msfs_optimization(bpy.types.Panel):
         # Calculate button
         calc_op = row.operator("lodify.calculate_msfs_lod_values", text="Calculate & Apply", icon='AUTO')
 
+        # MSFS 2024 Workaround
+        col.separator()
+        box_workaround = col.box()
+        box_workaround.label(text="MSFS 2024 Workaround", icon='SHADING_BBOX')
+        
+        col_work = box_workaround.column()
+        col_work.label(text="LOD Culling Fix (Invisible Cubes):")
+        col_work.prop(lod_props, "msfs2024_cube_multiplier", text="Size Multiplier")
+        
+        row_work = col_work.row()
+        row_work.scale_y = 1.2
+        row_work.operator("lodify.create_msfs2024_invisible_cube", text="Generate Invisible Cubes", icon='CUBE')
+
 
 class LODIFY_PT_generation_actions(bpy.types.Panel):
     """LOD generation action buttons panel."""

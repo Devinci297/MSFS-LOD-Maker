@@ -66,6 +66,15 @@ class LODIFY_props_scn(bpy.types.PropertyGroup):
         description="Comma-separated LOD values (e.g., '12,3,2,1') for manual override. Only used when automatic calculation is disabled",
         default="4,3,2,1"
     )
+
+    msfs2024_cube_multiplier: FloatProperty(
+        name="Invisible Cube Multiplier",
+        description="Multiplier for the size of the invisible cube relative to the object bounding box (MSFS 2024 workaround)",
+        default=20.0,
+        min=1.0,
+        max=1000.0,
+        precision=1
+    )
     
     lod_generation_method: EnumProperty(
         name="LOD Generation Method",

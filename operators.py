@@ -15,7 +15,11 @@ import os
 import bmesh
 import logging
 from mathutils import Vector
+import bmesh
+import logging
+from mathutils import Vector
 import math
+import re
 
 def find_base_collection():
     """Find the first active LOD00 collection in the current scene."""
@@ -271,6 +275,147 @@ def set_msfs_multi_exporter_lod_values(base_collection_name, lod_values):
         import traceback
         traceback.print_exc()
         return False
+
+class LODIFY_OT_create_msfs2024_invisible_cube(bpy.types.Operator):
+    """Create invisible cubes for MSFS 2024 LOD workaround."""
+    bl_idname = "lodify.create_msfs2024_invisible_cube"
+    bl_label = "Create Invisible Cubes (MSFS 2024)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        scn = context.scene
+        all_base_collections = find_all_active_base_collections()
+        
+        if not all_base_collections:
+            self.report({'ERROR'}, "No active LOD00 base collections found")
+            return {'CANCELLED'}
+        
+        multiplier = scn.lod.msfs2024_cube_multiplier
+        created_count = 0
+        
+        # Collect all relevant collections (base + LODs)
+        collections_to_process = []
+        for base_col in all_base_collections:
+            collections_to_process.append(base_col)
+            
+            # Find associated LOD collections
+            base_name = get_base_name_from_collection(base_col)
+            if base_name:
+                for i in range(1, 4): # LOD01, LOD02, LOD03
+                    lod_name = f"{base_name}_LOD{i:02d}"
+                    lod_col = bpy.data.collections.get(lod_name)
+                    if lod_col:
+                        collections_to_process.append(lod_col)
+
+        print(f"Processing {len(collections_to_process)} collections for invisible cubes...")
+
+        for col in collections_to_process:
+            # 1. Calculate Bounds
+            # We need to find bounds of valid mesh objects, excluding any existing invisible cubes
+            mesh_objects = [obj for obj in col.all_objects if obj.type == 'MESH' and "InvisibleCube" not in obj.name]
+            
+            if not mesh_objects:
+                print(f"Skipping collection '{col.name}': No mesh objects found")
+                continue
+                
+            min_v = Vector((float('inf'), float('inf'), float('inf')))
+            max_v = Vector((float('-inf'), float('-inf'), float('-inf')))
+            
+            has_geometry = False
+            for obj in mesh_objects:
+                # Use bound_box for efficiency
+                for point in obj.bound_box:
+                    world_point = obj.matrix_world @ Vector(point)
+                    min_v.x = min(min_v.x, world_point.x)
+                    min_v.y = min(min_v.y, world_point.y)
+                    min_v.z = min(min_v.z, world_point.z)
+                    max_v.x = max(max_v.x, world_point.x)
+                    max_v.y = max(max_v.y, world_point.y)
+                    max_v.z = max(max_v.z, world_point.z)
+                    has_geometry = True
+            
+            if not has_geometry:
+                continue
+
+            center = (min_v + max_v) / 2
+            dimensions = max_v - min_v
+            
+            # Calculate cube size (max dimension * multiplier)
+            max_dim = max(dimensions.x, dimensions.y, dimensions.z)
+            if max_dim == 0: max_dim = 1.0 # Fallback
+            
+            cube_size = max_dim * multiplier
+            
+            # 2. Create Cube
+            bpy.ops.mesh.primitive_cube_add(
+                size=cube_size, 
+                enter_editmode=False, 
+                align='WORLD', 
+                location=center, 
+                scale=(1, 1, 1)
+            )
+            cube = context.active_object
+            cube_name = f"InvisibleCube_{col.name}"
+            cube.name = cube_name
+            
+            # Ensure unique name if multiple runs
+            if cube.name != cube_name:
+                # If name conflict, maybe delete old one?
+                # For now, let Blender handle unique naming, or we could strict delete old ones
+                pass
+            
+            
+            # 3. Handle Material
+            # Extract base name from collection name (remove _LODxx suffix)
+            base_name_clean = re.sub(r"_LOD\d+$", "", col.name)
+            base_name_clean = base_name_clean.rstrip('_')
+            
+            mat_name = f"{base_name_clean}_InvisibleMat"
+            mat = bpy.data.materials.get(mat_name)
+            if not mat:
+                mat = bpy.data.materials.new(name=mat_name)
+                mat.use_nodes = True
+                
+            # Set MSFS 2024 specific parameters
+            # Use setattr to handle potentially missing properties if addon isn't loaded
+            try:
+                # Try setting as attribute first (correct way for addon properties)
+                if hasattr(mat, 'msfs_material_type'):
+                    mat.msfs_material_type = 'msfs_invisible'
+                else:
+                    # Fallback to custom property if attribute not found (unlikely but safe)
+                    mat["msfs_material_type"] = 'msfs_invisible'
+                    
+                if hasattr(mat, 'msfs_invisible_preview_color'):
+                     mat.msfs_invisible_preview_color = (0.0, 0.0, 0.0, 0.0)
+                else:
+                     mat["msfs_invisible_preview_color"] = (0.0, 0.0, 0.0, 0.0)
+
+                # Also set standard Blender settings for invisibility in viewport just in case
+                mat.blend_method = 'BLEND'
+                mat.diffuse_color = (0, 0, 0, 0)
+                
+            except Exception as e:
+                print(f"Warning: Could not set MSFS material properties: {e}")
+            
+            # Assign material
+            if cube.data.materials:
+                cube.data.materials[0] = mat
+            else:
+                cube.data.materials.append(mat)
+            
+            # 4. Link to Collection
+            # primitive_cube_add links to active collection (scene collection usually or context active)
+            # We want it strictly in 'col'
+            for old_col in cube.users_collection:
+                old_col.objects.unlink(cube)
+            col.objects.link(cube)
+            
+            print(f"Created invisible cube for '{col.name}' size {cube_size:.2f} at {center}")
+            created_count += 1
+
+        self.report({'INFO'}, f"Created {created_count} invisible cubes")
+        return {'FINISHED'}
 
 class LODIFY_OT_list_actions(bpy.types.Operator):
     bl_idname = "lodify.list_action"
@@ -1708,6 +1853,7 @@ classes = (
     LODIFY_OT_set_default_lod_values,
     LODIFY_OT_calculate_msfs_lod_values,
     LODIFY_OT_apply_lod_modifiers,
+    LODIFY_OT_create_msfs2024_invisible_cube,
 )
 
 def register():
